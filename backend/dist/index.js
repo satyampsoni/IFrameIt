@@ -1,50 +1,99 @@
-var __asyncValues = (this && this.__asyncValues) || function (o) {
-    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-    var m = o[Symbol.asyncIterator], i;
-    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
-};
-var _a, e_1, _b, _c;
-var _d, _e;
 import dotenv from "dotenv";
 dotenv.config();
-import chalk from "chalk";
-import Together from "together-ai";
-const together = new Together();
-try {
-    const response = await together.chat.completions.create({
-        messages: [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user", content: "Top three things to do in Delhi?" }
-        ],
-        model: "meta-llama/Llama-Vision-Free",
-        //max_tokens: 100,
-        temperature: 0,
-        stream: true
-    });
-    let fullResponse = "";
+import express from "express";
+import cors from "cors";
+const app = express();
+import { OpenAI } from "openai";
+app.use(cors());
+app.use(express.json());
+// Groq LLM chat API
+// Make sure to set GROQ_API_KEY in your .env file
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const openai = new OpenAI({
+    apiKey: GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1"
+});
+app.post('/chat', async (req, res) => {
+    const { messages } = req.body;
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: 'Messages array is required' });
+    }
     try {
-        for (var _f = true, response_1 = __asyncValues(response), response_1_1; response_1_1 = await response_1.next(), _a = response_1_1.done, !_a; _f = true) {
-            _c = response_1_1.value;
-            _f = false;
-            const token = _c;
-            const content = (_e = (_d = token.choices[0]) === null || _d === void 0 ? void 0 : _d.delta) === null || _e === void 0 ? void 0 : _e.content;
-            if (content) {
-                fullResponse += content;
-                console.log(chalk.green.bold("LLM Response: \n"));
-                console.log(chalk.white("```python\n" + fullResponse + "\n```"));
+        // Groq expects OpenAI-style messages
+        const response = await openai.chat.completions.create({
+            model: "llama3-70b-8192",
+            messages: messages.map((m) => ({ role: m.role, content: m.content })),
+            max_tokens: 512,
+            temperature: 0.7
+        });
+        const reply = response.choices[0]?.message?.content || "";
+        res.json({ reply });
+    }
+    catch (err) {
+        console.error("Groq API error:", err);
+        res.status(500).json({ error: "Failed to get LLM reply" });
+    }
+});
+// This endpoint takes a prompt and returns two arrays of prompts: one for the
+// backend and one for the frontend. The prompts are used to generate code
+// based on the user's input. The endpoint is used to support Bolt's ability to
+// generate code based on a user's input in the Web UI.
+//
+// The endpoint is a temporary solution until Bolt supports generating code
+// directly from the UI. The endpoint will be removed once Bolt supports
+// generating code directly.
+app.post('/template', async (req, res) => {
+    const prompt = req.body.prompt;
+    if (!prompt) {
+        return res.status(400).json({ error: "Prompt is required" });
+    }
+    try {
+        // Compose a system prompt for Groq LLM to generate a React app file structure as JSON
+        const systemPrompt = `You are a code generation assistant. Given a user prompt, generate a minimal React app project as a JSON array of files and folders. Each file/folder should be an object with: name, type ("file" or "folder"), content (for files), and children (for folders). For example:
+
+[
+  {"name": "src", "type": "folder", "children": [
+    {"name": "App.js", "type": "file", "content": "// ..."},
+    {"name": "index.js", "type": "file", "content": "// ..."}
+  ]},
+  {"name": "package.json", "type": "file", "content": "{...}"}
+]
+
+Only return the JSON array, nothing else. The app should fulfill the user's request: "${prompt}"`;
+        const response = await openai.chat.completions.create({
+            model: "llama3-70b-8192",
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: prompt }
+            ],
+            max_tokens: 2048,
+            temperature: 0.7
+        });
+        // Try to extract JSON from the LLM response
+        const text = response.choices[0]?.message?.content || "";
+        let files;
+        try {
+            files = JSON.parse(text);
+        }
+        catch (e) {
+            // Attempt to extract JSON substring if LLM adds extra text
+            const match = text.match(/\[.*\]/s);
+            if (match) {
+                files = JSON.parse(match[0]);
+            }
+            else {
+                return res.status(500).json({ error: "LLM did not return valid JSON." });
             }
         }
+        res.json({ files });
     }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (!_f && !_a && (_b = response_1.return)) await _b.call(response_1);
-        }
-        finally { if (e_1) throw e_1.error; }
+    catch (err) {
+        console.error("Groq API error (template):", err);
+        res.status(500).json({ error: "Failed to generate app files." });
     }
-}
-catch (error) {
-    console.error("Error:", error);
-}
+});
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
