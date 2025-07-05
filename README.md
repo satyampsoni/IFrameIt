@@ -137,6 +137,3 @@ curl -X POST http://localhost:3000/template \
 - You can connect any frontend or HTTP client to these endpoints.
 
 ---
-
-## License
-MIT
