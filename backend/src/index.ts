@@ -38,7 +38,7 @@ app.post('/chat', async (req: any, res: any) => {
     const reply = response.choices[0]?.message?.content || "";
     res.json({ reply });
   } catch (err: any) {
-    console.error("Groq API error:", err);
+    // Error handled silently, only response returned.
     res.status(500).json({ error: "Failed to get LLM reply" });
   }
 });
@@ -89,13 +89,11 @@ Only return the JSON array, nothing else. The app should fulfill the user's requ
     }
     res.json({ files });
   } catch (err: any) {
-    console.error("Groq API error (template):", err);
+    // Error handled silently, only response returned.
     res.status(500).json({ error: "Failed to generate app files." });
   }
 });
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+app.listen(PORT);
