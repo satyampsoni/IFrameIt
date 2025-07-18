@@ -86,7 +86,7 @@ IFrameIt Backend is a lightweight Node.js/Express API server that provides endpo
 
 ### 1. Clone the Repository
 ```sh
-git clone <repo-url>
+git clone https://github.com/satyampsoni/IFrameIt.git
 cd IFrameIt/backend
 ```
 
